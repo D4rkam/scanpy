@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import signal, sys, nmap, subprocess, time, re
+import signal, sys, nmap, subprocess, time, re, os
 
 #=========== Manejo de Ctrl + C ===========#
 def handler(signal, frame):
@@ -13,9 +13,11 @@ listOfPorts = []
 
 def getArgs():
     if len(sys.argv) != 3:
-        print(f"[!] Uso: scanpy <ip_address> <filenameSaveData>")
+        print(f"[!] Uso: scanpy <ip_address> <filename>")
         sys.exit(1)
-    return (host:=getHost(sys.argv[1]), filenameSave:=sys.argv[2])
+    host = getHost(sys.argv[1])
+    filenameSave = f"{os.getcwd()}/{sys.argv[2]}"
+    return (host, filenameSave)
 
 def getHost(hostInput):
     cmd = f"/usr/bin/ping -c 1 {hostInput}"
@@ -25,17 +27,16 @@ def getHost(hostInput):
     host = re.search(string=out,pattern=r"\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}")[0]
     return host
 
-#def showMessage(ports: list, host):
-#    open_ports = "-p"
-#    count = 0
-#    for port in ports:
-#        if count == 0:
-#            open_ports = open_ports + "" + f"{port}"
-#            count = 1
-#        else:
-#            open_ports = open_ports + "," + f"{port}"
-#    print("----------------------")
-#    print(f"Puertos Abiertos (copiar) : {open_ports} {host}")
+def copyPorts():
+    open_ports = ""
+    count = 0
+    for port in listOfPorts:
+        if count == 0:
+            open_ports = open_ports + "" + f"{port}"
+            count = 1
+        else:
+            open_ports = open_ports + "," + f"{port}"
+    return open_ports
 
 def getPorts(nm: nmap.PortScanner, host: str):
     for proto in nm[host].all_protocols():
@@ -48,8 +49,12 @@ def getPorts(nm: nmap.PortScanner, host: str):
             print(f"Puerto : {port}\tEstado : Abierto\tServicio : {serviceInfo}")
             listOfPorts.append(port)
 
-def scanOpenPorts():
-    (host, filenameSave) = getArgs()
+def scanVersionAndServices(host, filenameSave):
+    nm = nmap.PortScanner()
+    nm.scan(host, arguments=f"-sC -sV -p{copyPorts()} {host} -oN {filenameSave}")
+    print(f"[+] Reporte generado en la ruta: {filenameSave}\n")
+
+def scanOpenPorts(host, filenameSave):
     print("""
         ░█▀▀▀█ ░█▀▀█ ─█▀▀█ ░█▄─░█ ░█▀▀█ ░█──░█ 
         ─▀▀▀▄▄ ░█─── ░█▄▄█ ░█░█░█ ░█▄▄█ ░█▄▄▄█ 
@@ -60,16 +65,21 @@ def scanOpenPorts():
     hostState = nm[host].state()
 
     print(f"Host : {host}\nHostname : {hostName}")
-    print("Estado : " + ("Activo" if hostState == "up" else hostState)) #Si el estado del host es Up se intercambia por Activo
+    print("Estado : Abierto")
     getPorts(nm, host)
+    print(f"[+] Reporte generado en la ruta: {filenameSave}")
 
 if __name__ == "__main__":
-    t1 = time.time()
-    scanOpenPorts()
-    #Implementar el segundo escaneo (versiones y servicios; -sCV)
-    #Utilizando los puertos abiertos y solicitando al usuario si quiere o no realizarlo
-    print(f"\nEl escaneo tardo: {round(time.time() - t1)}s")
-
+    (host, filenameSave) = getArgs()
+    scanOpenPorts(host, filenameSave)
+    while True:
+        option = input("\n[?] Generar reporte avanzado de versiones y servicios? (s/n): ")
+        if option.lower() == "s":
+            filenameSave = f"{os.getcwd()}/" + input("[+] Ingrese el nombre del archivo: ")
+            scanVersionAndServices(host, filenameSave)
+            break
+        if option.lower() == "n":
+            break
 
 
 """
